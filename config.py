@@ -17,6 +17,8 @@ PADRAO = {
     # Outras opções: "tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"
     "modelo": "auto",
     "idioma": "pt",
+    # Depois de quantos dias apagar os áudios (a transcrição fica). 0 = nunca apagar.
+    "dias_manter_audio": 30,
 }
 
 

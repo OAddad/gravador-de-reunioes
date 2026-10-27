@@ -32,6 +32,8 @@ Na primeira transcrição o app baixa o modelo do Whisper para a pasta `modelos/
 
 As gravações ficam em `Documentos\Transcricoes\<data>_<nome>\` com os dois áudios e a `transcricao.txt`.
 
+**Limpeza automática:** ao abrir, o app apaga os áudios das reuniões com mais de 30 dias e mantém só a `transcricao.txt`. Áudio de reunião sem transcrição (que falhou) nunca é apagado. O prazo fica em `config.json` (`"dias_manter_audio": 30`; use `0` para nunca apagar).
+
 ## Dicas
 
 - **Use fone de ouvido.** Na caixa de som a voz do outro vaza no seu microfone. O app tenta remover esse eco, mas com fone a separação é perfeita.
@@ -47,5 +49,5 @@ As gravações ficam em `Documentos\Transcricoes\<data>_<nome>\` com os dois áu
 ## Testes
 
 ```
-.venv\Scripts\python -m unittest test_merger.py test_historico.py
+.venv\Scripts\python -m unittest test_merger.py test_historico.py test_limpeza.py
 ```

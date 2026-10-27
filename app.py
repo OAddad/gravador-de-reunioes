@@ -34,6 +34,7 @@ if sys.stdout is None:
 
 from config import carregar_config, salvar_config  # noqa: E402
 from historico import ultimas_reunioes  # noqa: E402
+from limpeza import limpar_audios_antigos  # noqa: E402
 from merger import formatar, montar_transcricao, tempo  # noqa: E402
 from recorder import Gravador  # noqa: E402
 from transcriber import Transcritor  # noqa: E402
@@ -122,6 +123,8 @@ class App:
         self.raiz.after(200, self._tick)
         # carrega o modelo já ao abrir, para a transcrição começar na hora ao parar
         threading.Thread(target=self._preparar_modelo, daemon=True).start()
+        # apaga os áudios das reuniões antigas (mantém a transcrição)
+        threading.Thread(target=self._limpar, daemon=True).start()
         self.raiz.protocol("WM_DELETE_WINDOW", self._fechar)
 
     def _montar_tela(self) -> None:
@@ -241,6 +244,13 @@ class App:
         except Exception as erro:
             logging.exception("Erro ao carregar o modelo ao abrir")
             self.fila.put(("modelo_erro", str(erro)))
+
+    def _limpar(self) -> None:
+        """Roda em thread ao abrir: apaga áudios com mais de N dias já transcritos."""
+        try:
+            limpar_audios_antigos(Path(self.cfg["pasta_saida"]), int(self.cfg["dias_manter_audio"]))
+        except Exception:
+            logging.exception("Erro na limpeza dos áudios antigos")
 
     def _salvar_modo(self, modo: str) -> None:
         """Guarda o modo da placa que funcionou, para pular os que falham."""
