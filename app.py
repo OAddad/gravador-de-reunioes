@@ -51,10 +51,29 @@ def _nome_pasta(nome: str) -> str:
     return re.sub(r"[^\w\- ]", "", nome).strip() or "Contato"
 
 
+def _esconder_da_captura(janela: tk.Toplevel) -> None:
+    """Pede ao Windows para não mostrar a janela em capturas de tela
+    (compartilhamento no Meet, Zoom, prints). Na tela de quem grava ela
+    aparece normal. Precisa do Windows 10 versão 2004 ou mais novo;
+    em versões antigas o card só continua aparecendo."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        janela.update_idletasks()
+        user32 = ctypes.windll.user32
+        hwnd = user32.GetAncestor(janela.winfo_id(), 2)  # 2 = GA_ROOT: a janela de verdade
+        if not user32.SetWindowDisplayAffinity(hwnd, 0x11):  # 0x11 = WDA_EXCLUDEFROMCAPTURE
+            logging.info("Windows não aceitou esconder o card da captura de tela")
+    except Exception:
+        logging.exception("Erro ao esconder o card da captura de tela")
+
+
 class CardGravando(tk.Toplevel):
     """Card fino, sempre por cima de tudo, enquanto grava: uma linha só com
     o ponto vermelho, com quem é a conversa, o tempo e o Parar.
-    Dá pra arrastar segurando em qualquer parte (menos no botão)."""
+    Dá pra arrastar segurando em qualquer parte (menos no botão).
+    Não aparece para quem vê sua tela compartilhada."""
 
     def __init__(self, raiz: tk.Tk, contato: str, ao_parar):
         """Cria o card no canto superior direito da tela."""
@@ -85,6 +104,7 @@ class CardGravando(tk.Toplevel):
             elemento.bind("<ButtonPress-1>", self._pegar)
             elemento.bind("<B1-Motion>", self._arrastar)
         self._piscar_visivel = True
+        _esconder_da_captura(self)
 
     def _pegar(self, evento) -> None:
         """Guarda onde o mouse pegou o card."""
