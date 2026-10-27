@@ -55,12 +55,14 @@ def agrupar(segmentos: list[Segmento]) -> list[Segmento]:
 
 
 def frases(palavras: list[Segmento]) -> list[Segmento]:
-    """Junta palavras de uma trilha em frases curtas, quebrando nas pausas.
+    """Junta palavras de uma trilha em frases curtas, quebrando nas pausas e
+    quando muda quem fala (vozes separadas no áudio do computador).
     Frases curtas permitem intercalar as duas trilhas na ordem certa."""
     resultado: list[Segmento] = []
     for p in sorted(palavras, key=lambda s: s.inicio):
         ultima = resultado[-1] if resultado else None
-        if ultima and p.inicio - ultima.fim <= PAUSA_FRASE_SEG:
+        if (ultima and ultima.falante == p.falante
+                and p.inicio - ultima.fim <= PAUSA_FRASE_SEG):
             ultima.fim = max(ultima.fim, p.fim)
             # "resolvê" + "-la" vira "resolvê-la"; pontuação também gruda
             separador = "" if p.texto[0] in "-,.!?;:" else " "

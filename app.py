@@ -33,17 +33,19 @@ if sys.stdout is None:
     sys.stdout = open(os.devnull, "w")
 
 from config import carregar_config, salvar_config  # noqa: E402
+from diarizacao import atribuir_pessoas, preparar_pessoas, renomear, separar  # noqa: E402
 from historico import FAIXAS, Reuniao, audio_da_faixa, ultimas_reunioes  # noqa: E402
 from compressao import duracao_audio, comprimir_pendentes, comprimir_reuniao  # noqa: E402
 from limpeza import limpar_audios_antigos  # noqa: E402
 from merger import formatar, montar_transcricao, tempo  # noqa: E402
 from recorder import Gravador  # noqa: E402
-from transcriber import Transcritor  # noqa: E402
+from transcriber import PASTA_MODELOS, Transcritor  # noqa: E402
 
 COR_CARD = "#1C1F26"
 COR_TEXTO = "#F2F4F7"
 COR_SUAVE = "#9AA3B2"
 COR_REC = "#E5484D"
+OPCOES_PESSOAS = ["1", "2", "3", "4", "5", "6", "Não sei"]
 
 
 def _nome_pasta(nome: str) -> str:
@@ -121,6 +123,68 @@ class CardGravando(tk.Toplevel):
         self.ponto.configure(fg=COR_REC if self._piscar_visivel or segundos < 1 else COR_CARD)
 
 
+class DialogoNomes(tk.Toplevel):
+    """Janela que aparece depois de separar as vozes: para cada pessoa
+    encontrada, mostra um trecho do que ela falou, um botão para ouvir e
+    um campo para digitar o nome."""
+
+    def __init__(self, raiz: tk.Tk, pessoas: list, contato: str,
+                 resposta: dict, pronto: threading.Event):
+        """Monta a lista de pessoas; o primeiro nome já vem com o contato."""
+        super().__init__(raiz)
+        self.pessoas, self.resposta, self.pronto = pessoas, resposta, pronto
+        self.title("Quem é quem?")
+        self.resizable(False, False)
+        self.attributes("-topmost", True)
+        q = ttk.Frame(self, padding=16)
+        q.grid()
+        ttk.Label(q, text=f"Encontrei {len(pessoas)} vozes no áudio do computador. "
+                          "Dê o nome de cada uma:", wraplength=420).grid(
+            row=0, column=0, columnspan=3, sticky="w", pady=(0, 10))
+        self.campos = []
+        for i, p in enumerate(pessoas):
+            linha = 1 + i * 2
+            ttk.Label(q, text=p.rotulo, font=("Segoe UI Semibold", 9)).grid(row=linha, column=0, sticky="w")
+            campo = ttk.Entry(q, width=24)
+            if i == 0:
+                campo.insert(0, contato)
+            campo.grid(row=linha, column=1, padx=(8, 0), sticky="w")
+            ouvir = ttk.Button(q, text="▶ Ouvir", width=8, command=lambda a=p.amostra: self._ouvir(a))
+            ouvir.grid(row=linha, column=2, padx=(8, 0))
+            if not p.amostra:
+                ouvir.configure(state="disabled")
+            ttk.Label(q, text=f"“{p.exemplo}”", foreground="#666", wraplength=420).grid(
+                row=linha + 1, column=0, columnspan=3, sticky="w", pady=(2, 10))
+            self.campos.append(campo)
+        ttk.Button(q, text="Salvar transcrição", command=self._salvar).grid(
+            row=1 + len(pessoas) * 2, column=0, columnspan=3, sticky="e")
+        self.protocol("WM_DELETE_WINDOW", self._salvar)
+        self.campos[0].focus()
+        self.bind("<Return>", lambda _e: self._salvar())
+        self.grab_set()
+
+    def _ouvir(self, amostra) -> None:
+        """Toca o trecho da pessoa (sem travar a janela)."""
+        try:
+            import winsound
+            winsound.PlaySound(str(amostra), winsound.SND_FILENAME | winsound.SND_ASYNC)
+        except Exception:
+            logging.exception("Não consegui tocar a amostra")
+
+    def _salvar(self) -> None:
+        """Guarda os nomes (vazio mantém "Pessoa N") e libera a transcrição."""
+        try:
+            import winsound
+            winsound.PlaySound(None, 0)
+        except Exception:
+            pass
+        for pessoa, campo in zip(self.pessoas, self.campos):
+            self.resposta[pessoa.rotulo] = campo.get().strip() or pessoa.rotulo
+        self.grab_release()
+        self.destroy()
+        self.pronto.set()
+
+
 class App:
     """Janela principal e fluxo gravar > parar > transcrever."""
 
@@ -166,20 +230,29 @@ class App:
         self.campo_nome = ttk.Entry(q, width=36)
         self.campo_nome.grid(row=2, column=0, columnspan=2, sticky="we")
         self.campo_nome.focus()
+        linha_pessoas = ttk.Frame(q)
+        linha_pessoas.grid(row=3, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        ttk.Label(linha_pessoas, text="Pessoas do outro lado:").pack(side="left")
+        self.campo_pessoas = ttk.Combobox(linha_pessoas, width=8, state="readonly",
+                                          values=OPCOES_PESSOAS)
+        self.campo_pessoas.set("1")
+        self.campo_pessoas.pack(side="left", padx=(6, 0))
+        ttk.Label(linha_pessoas, text="(reunião em grupo: 2 ou mais)", foreground="#777").pack(
+            side="left", padx=(6, 0))
         self.botao = ttk.Button(q, text="● Gravar", command=self._gravar)
-        self.botao.grid(row=3, column=0, sticky="we", pady=(12, 0))
+        self.botao.grid(row=4, column=0, sticky="we", pady=(12, 0))
         ttk.Button(q, text="Abrir pasta", command=self._abrir_pasta).grid(
-            row=3, column=1, sticky="we", pady=(12, 0), padx=(8, 0))
+            row=4, column=1, sticky="we", pady=(12, 0), padx=(8, 0))
         self.lbl_status = ttk.Label(q, text="Pronto.", foreground="#555", wraplength=280)
-        self.lbl_status.grid(row=4, column=0, columnspan=2, pady=(12, 0))
+        self.lbl_status.grid(row=5, column=0, columnspan=2, pady=(12, 0))
         self.barra = ttk.Progressbar(q, length=280, maximum=100)
-        self.barra.grid(row=5, column=0, columnspan=2, pady=(8, 0))
+        self.barra.grid(row=6, column=0, columnspan=2, pady=(8, 0))
         self.barra.grid_remove()
-        ttk.Separator(q).grid(row=6, column=0, columnspan=2, sticky="we", pady=(14, 8))
+        ttk.Separator(q).grid(row=7, column=0, columnspan=2, sticky="we", pady=(14, 8))
         ttk.Label(q, text="Últimas reuniões", font=("Segoe UI Semibold", 9)).grid(
-            row=7, column=0, columnspan=2, sticky="w")
+            row=8, column=0, columnspan=2, sticky="w")
         self.lista = ttk.Frame(q)
-        self.lista.grid(row=8, column=0, columnspan=2, sticky="we", pady=(4, 0))
+        self.lista.grid(row=9, column=0, columnspan=2, sticky="we", pady=(4, 0))
         self._atualizar_lista()
 
     # ---------- configurações e lista ----------
@@ -272,6 +345,9 @@ class App:
                              duracao: float | None) -> None:
         """Trava a janela, mostra o progresso e transcreve em segundo plano."""
         self.pasta_atual = pasta
+        escolha = self.campo_pessoas.get()
+        n_pessoas = None if escolha == "Não sei" else int(escolha)
+        self.campo_pessoas.configure(state="disabled")
         self.botao.configure(state="disabled")
         self.campo_nome.configure(state="disabled")
         self.barra["value"] = 0
@@ -282,7 +358,7 @@ class App:
             self._status("Carregando o modelo de transcrição...")
         else:
             self._status("Transcrevendo... 0%")
-        threading.Thread(target=self._transcrever, args=(pasta, contato, data, duracao),
+        threading.Thread(target=self._transcrever, args=(pasta, contato, data, duracao, n_pessoas),
                          daemon=True).start()
 
     # ---------- transcrever ----------
@@ -325,9 +401,37 @@ class App:
         """Microfone vale de 0 a 50%, áudio do computador de 50 a 100%."""
         self.fila.put(("progresso", int((etapa + fracao) * 50)))
 
+    def _separar_vozes(self, audio_sis: Path, palavras: list, contato: str,
+                       n_pessoas: int | None, pasta: Path) -> list[str]:
+        """Separa as vozes do áudio do computador e pergunta o nome de cada
+        pessoa. Devolve os nomes, na ordem em que falaram. Se der erro,
+        mantém tudo com o nome do contato (a transcrição não se perde)."""
+        try:
+            trechos, audio = separar(
+                audio_sis, PASTA_MODELOS, n_pessoas,
+                lambda f: self.fila.put(("vozes", int(f * 100))), self._avisar_download)
+            rotulos = atribuir_pessoas(palavras, trechos)
+        except Exception:
+            logging.exception("Erro ao separar as vozes; seguindo com um nome só")
+            return [contato]
+        if len(rotulos) < 2:
+            renomear(palavras, {r: contato for r in rotulos})
+            return [contato]
+        pessoas = preparar_pessoas(palavras, rotulos, audio, pasta)
+        resposta: dict = {}
+        pronto = threading.Event()
+        self.fila.put(("nomear", (pessoas, contato, resposta, pronto)))
+        pronto.wait()
+        for p in pessoas:
+            if p.amostra:
+                p.amostra.unlink(missing_ok=True)
+        renomear(palavras, resposta)
+        return [resposta.get(r, r) for r in rotulos]
+
     def _transcrever(self, pasta: Path, outro: str, data: datetime,
-                     duracao: float | None) -> None:
-        """Roda em thread: transcreve as duas trilhas e salva o .txt.
+                     duracao: float | None, n_pessoas: int | None = 1) -> None:
+        """Roda em thread: transcreve as duas trilhas, separa as vozes do áudio
+        do computador (se for reunião em grupo) e salva o .txt.
         Lê o WAV ou, se já foi comprimido, o .ogg."""
         try:
             eu = self.cfg["meu_nome"]
@@ -340,11 +444,15 @@ class App:
                 audio_mic, eu, lambda f: self._avisar_progresso(0, f))
             sistema = self.transcritor.transcrever(
                 audio_sis, outro, lambda f: self._avisar_progresso(1, f))
+            outros = [outro]
+            if n_pessoas != 1:
+                outros = self._separar_vozes(audio_sis, sistema, outro, n_pessoas, pasta)
+            nomes = ", ".join(outros)
             cabecalho = (
-                f"Reunião: {eu} x {outro}\n"
+                f"Reunião: {eu} x {nomes}\n"
                 f"Data: {data.strftime('%d/%m/%Y %H:%M')}\n"
                 f"Duração: {tempo(duracao)}\n"
-                f"Participantes: {eu} (microfone), {outro} (áudio do computador)"
+                f"Participantes: {eu} (microfone), {nomes} (áudio do computador)"
             )
             texto = formatar(montar_transcricao(mic, sistema), cabecalho)
             (pasta / "transcricao.txt").write_text(texto, encoding="utf-8")
@@ -381,6 +489,13 @@ class App:
                 elif tipo == "progresso":
                     self.barra["value"] = conteudo
                     self._status(f"Transcrevendo... {conteudo}%")
+                elif tipo == "vozes":
+                    self.barra["value"] = conteudo
+                    self._status(f"Separando as vozes... {conteudo}%")
+                elif tipo == "nomear":
+                    pessoas, contato, resposta, pronto = conteudo
+                    self._status("Quem é quem? Dê o nome de cada pessoa.")
+                    DialogoNomes(self.raiz, pessoas, contato, resposta, pronto)
                 else:
                     break
                 tipo = None
@@ -392,6 +507,8 @@ class App:
             self.botao.configure(state="normal")
             self.campo_nome.configure(state="normal")
             self.campo_nome.delete(0, "end")  # toda gravação nova pede o nome de novo
+            self.campo_pessoas.configure(state="readonly")
+            self.campo_pessoas.set("1")
             self.campo_nome.focus()
         if tipo == "ok":
             self.raiz.clipboard_clear()

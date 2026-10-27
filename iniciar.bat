@@ -1,7 +1,7 @@
 @echo off
 cd /d "%~dp0"
 rem Troque este numero sempre que o requirements.txt mudar, para reinstalar.
-set VERSAO=4
+set VERSAO=5
 if not exist .venv\Scripts\python.exe (
     echo Criando o ambiente do app, aguarde...
     py -3 -m venv .venv 2>nul || python -m venv .venv
@@ -12,7 +12,7 @@ if not "%INSTALADA%"=="%VERSAO%" (
     echo.
     .venv\Scripts\python -m pip install --upgrade pip
     .venv\Scripts\python -m pip install -r requirements.txt
-    .venv\Scripts\python -c "import faster_whisper, pyaudiowpatch" 2>nul
+    .venv\Scripts\python -c "import faster_whisper, pyaudiowpatch, sherpa_onnx" 2>nul
     if errorlevel 1 (
         echo.
         echo ===== A instalacao falhou. Tire um print desta tela e mande para o Claude =====

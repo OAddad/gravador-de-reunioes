@@ -127,3 +127,16 @@ def garantir_modelo(nome: str, pasta_modelos: Path,
         _baixar_arquivo(url, tamanho, pasta / arquivo, contador)
     log.info("Modelo %s baixado.", nome)
     return pasta
+
+
+def baixar_url(url: str, destino: Path, aviso: AvisoDownload = lambda _b, _t: None) -> Path:
+    """Baixa um arquivo qualquer (ex.: modelo de voz do GitHub) em partes paralelas."""
+    destino = Path(destino)
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    info = _consultar(url)
+    if info is None:
+        raise RuntimeError(f"Arquivo não encontrado: {url}")
+    url_final, tamanho = info
+    log.info("Baixando %s: %.0f MB", destino.name, tamanho / 1024 / 1024)
+    _baixar_arquivo(url_final, tamanho, destino, _Contador(tamanho, aviso))
+    return destino

@@ -11,6 +11,7 @@ Grava ligações e reuniões no Windows (WhatsApp Desktop, Google Meet, Zoom, qu
 
 - Grava **duas faixas separadas**: o seu microfone e o som do computador (WASAPI loopback). Por isso sabe quem falou sem precisar de IA pra adivinhar.
 - Transcreve com o **Whisper** ([faster-whisper](https://github.com/SYSTRAN/faster-whisper)) rodando no próprio PC.
+- Em reuniões em grupo, separa as vozes do áudio do computador com o [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (também local).
 - Usa a placa de vídeo NVIDIA quando ela existe (modelo `large-v3-turbo`, mais preciso). Sem placa, roda no processador com o modelo `small`.
 - Intercala as duas faixas pela hora de cada palavra, para a conversa sair na ordem certa.
 
@@ -26,9 +27,11 @@ Na primeira transcrição o app baixa o modelo do Whisper para a pasta `modelos/
 
 1. Em **Você**, coloque o seu nome (fica salvo).
 2. Em **Com quem é a conversa?**, digite o nome da outra pessoa (obrigatório, a cada gravação).
-3. Clique **Gravar**. A janela some e fica um card pequeno por cima de tudo, com o nome, o tempo e o botão **Parar**. Dá pra arrastar o card.
+   Em **Pessoas do outro lado**, deixe **1** numa ligação; numa reunião em grupo escolha quantas são (ou "Não sei").
+3. Clique **Gravar**. A janela some e fica um card pequeno por cima de tudo, com o nome, o tempo e o botão **Parar**. Dá pra arrastar o card, e ele não aparece para quem vê sua tela compartilhada.
 4. Clique **Parar**. A janela volta mostrando a porcentagem da transcrição.
-5. Pronto: o texto já fica copiado. Em **Últimas reuniões** aparecem as 5 mais recentes com **Abrir** e **Na pasta**.
+5. Em reunião em grupo, o app separa as vozes do áudio do computador e pergunta **quem é quem** (mostra um trecho de cada pessoa e um botão **Ouvir**).
+6. Pronto: o texto já fica copiado. Em **Últimas reuniões** aparecem as 5 mais recentes com **Abrir**, **Na pasta** e **Refazer** (transcreve de novo a partir do áudio, útil se a transcrição falhou).
 
 As gravações ficam em `Documentos\Transcricoes\<data>_<nome>\` com os dois áudios e a `transcricao.txt`.
 
@@ -51,5 +54,5 @@ As gravações ficam em `Documentos\Transcricoes\<data>_<nome>\` com os dois áu
 ## Testes
 
 ```
-.venv\Scripts\python -m unittest test_merger.py test_historico.py test_limpeza.py test_compressao.py
+.venv\Scripts\python -m unittest test_merger.py test_historico.py test_limpeza.py test_compressao.py test_diarizacao.py
 ```
