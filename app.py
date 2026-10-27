@@ -34,6 +34,7 @@ if sys.stdout is None:
 
 from config import carregar_config, salvar_config  # noqa: E402
 from historico import ultimas_reunioes  # noqa: E402
+from compressao import comprimir_pendentes, comprimir_reuniao  # noqa: E402
 from limpeza import limpar_audios_antigos  # noqa: E402
 from merger import formatar, montar_transcricao, tempo  # noqa: E402
 from recorder import Gravador  # noqa: E402
@@ -246,7 +247,12 @@ class App:
             self.fila.put(("modelo_erro", str(erro)))
 
     def _limpar(self) -> None:
-        """Roda em thread ao abrir: apaga áudios com mais de N dias já transcritos."""
+        """Roda em thread ao abrir: comprime os áudios que ficaram sem comprimir
+        e apaga os com mais de N dias já transcritos."""
+        try:
+            comprimir_pendentes(Path(self.cfg["pasta_saida"]))
+        except Exception:
+            logging.exception("Erro ao comprimir áudios pendentes")
         try:
             limpar_audios_antigos(Path(self.cfg["pasta_saida"]), int(self.cfg["dias_manter_audio"]))
         except Exception:
@@ -285,6 +291,8 @@ class App:
             texto = formatar(montar_transcricao(mic, sistema), cabecalho)
             (pasta / "transcricao.txt").write_text(texto, encoding="utf-8")
             self.fila.put(("ok", texto))
+            # depois de entregar o texto, comprime os áudios (~1 GB/h vira ~22 MB/h)
+            comprimir_reuniao(pasta)
         except Exception as erro:
             logging.exception("Erro na transcrição")
             self.fila.put(("erro", str(erro)))

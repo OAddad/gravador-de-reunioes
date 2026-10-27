@@ -23,6 +23,7 @@ class TestLimpeza(unittest.TestCase):
         pasta.mkdir()
         (pasta / "audio_microfone.wav").write_bytes(b"0" * 100)
         (pasta / "audio_sistema.wav").write_bytes(b"0" * 200)
+        (pasta / "audio_sistema.ogg").write_bytes(b"0" * 10)
         if com_txt:
             (pasta / "transcricao.txt").write_text("texto", encoding="utf-8")
         return pasta
@@ -35,7 +36,8 @@ class TestLimpeza(unittest.TestCase):
             recente = self._reuniao(raiz, "2026-11-20_10h00_Bia")
             falhou = self._reuniao(raiz, "2026-09-01_10h00_Caio", com_txt=False)
             apagados, liberados = limpar_audios_antigos(raiz, 30, AGORA)
-            self.assertEqual((apagados, liberados), (2, 300))
+            self.assertEqual((apagados, liberados), (3, 310))
+            self.assertFalse((antiga / "audio_sistema.ogg").exists())
             self.assertFalse((antiga / "audio_microfone.wav").exists())
             self.assertTrue((antiga / "transcricao.txt").exists())
             self.assertTrue((recente / "audio_sistema.wav").exists())

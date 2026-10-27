@@ -13,7 +13,8 @@ from pathlib import Path
 log = logging.getLogger("gravador")
 
 PADRAO_DATA = re.compile(r"^(\d{4})-(\d{2})-(\d{2})_(\d{2})h(\d{2})_")
-ARQUIVOS_AUDIO = ("audio_microfone.wav", "audio_sistema.wav")
+ARQUIVOS_AUDIO = ("audio_microfone.wav", "audio_sistema.wav",
+                  "audio_microfone.ogg", "audio_sistema.ogg")
 
 
 def _data_da_reuniao(pasta: Path) -> datetime:
