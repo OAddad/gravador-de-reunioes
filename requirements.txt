@@ -1,0 +1,7 @@
+faster-whisper>=1.1.0
+# av 17 em diante quebra o faster-whisper (erro "metadata_errors"); manter a 16.1.0
+av==16.1.0
+PyAudioWPatch>=0.2.12
+# bibliotecas CUDA para usar a placa de vídeo NVIDIA (sem elas, roda no processador)
+nvidia-cublas-cu12; sys_platform == "win32"
+nvidia-cudnn-cu12==9.*; sys_platform == "win32"

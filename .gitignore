@@ -1,0 +1,11 @@
+# Ambiente Python (recriado pelo iniciar.bat em cada máquina)
+.venv/
+__pycache__/
+
+# Modelos do Whisper (486 MB+, o GitHub recusa acima de 100 MB; baixam sozinhos)
+modelos/
+
+# Dados pessoais e de execução
+config.json
+historico_nomes.json
+gravador.log
