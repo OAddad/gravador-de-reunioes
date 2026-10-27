@@ -107,7 +107,10 @@ class App:
         self.raiz = raiz
         self.cfg = carregar_config()
         self.gravador = Gravador()
-        self.transcritor = Transcritor(self.cfg["modelo"], self.cfg["idioma"], self._avisar_download)
+        self.transcritor = Transcritor(
+            self.cfg["modelo"], self.cfg["idioma"], self._avisar_download,
+            modo_salvo=self.cfg.get("modo_placa", ""), ao_achar_modo=self._salvar_modo)
+        self.transcrevendo = False
         self.fila: queue.Queue = queue.Queue()
         self.pasta_atual: Path | None = None
         self.contato = ""
@@ -117,6 +120,8 @@ class App:
         self.tique = 0
         self._montar_tela()
         self.raiz.after(200, self._tick)
+        # carrega o modelo já ao abrir, para a transcrição começar na hora ao parar
+        threading.Thread(target=self._preparar_modelo, daemon=True).start()
         self.raiz.protocol("WM_DELETE_WINDOW", self._fechar)
 
     def _montar_tela(self) -> None:
@@ -218,10 +223,30 @@ class App:
         self.barra["value"] = 0
         self.barra.grid()
         self.ultimo_pct_download = -1
-        self._status("Preparando o modelo...")
+        self.transcrevendo = True
+        if self.transcritor.modelo is None:
+            self._status("Carregando o modelo de transcrição...")
+        else:
+            self._status("Transcrevendo... 0%")
         threading.Thread(target=self._transcrever, args=(duracao,), daemon=True).start()
 
     # ---------- transcrever ----------
+    def _preparar_modelo(self) -> None:
+        """Roda em thread ao abrir o app: baixa (se preciso) e carrega o modelo."""
+        self.fila.put(("carregando", None))
+        try:
+            self.transcritor.preparar()
+            onde = "na placa de vídeo" if self.transcritor.dispositivo == "cuda" else "no processador"
+            self.fila.put(("modelo_pronto", onde))
+        except Exception as erro:
+            logging.exception("Erro ao carregar o modelo ao abrir")
+            self.fila.put(("modelo_erro", str(erro)))
+
+    def _salvar_modo(self, modo: str) -> None:
+        """Guarda o modo da placa que funcionou, para pular os que falham."""
+        self.cfg["modo_placa"] = modo
+        salvar_config(self.cfg)
+
     def _avisar_download(self, baixado: int, total: int) -> None:
         """Roda na thread do download: manda a porcentagem só quando muda."""
         pct = int(baixado * 100 / max(total, 1))
@@ -266,8 +291,17 @@ class App:
                 tipo, conteudo = self.fila.get_nowait()
                 if tipo == "download":
                     pct, total_mb = conteudo
+                    self.barra.grid()
                     self.barra["value"] = pct
                     self._status(f"Baixando o modelo (só na primeira vez)... {pct}% de {total_mb} MB")
+                elif tipo == "carregando":
+                    if not self.transcrevendo:
+                        self._status("Carregando o modelo de transcrição...")
+                elif tipo in ("modelo_pronto", "modelo_erro"):
+                    if not self.transcrevendo:
+                        self.barra.grid_remove()
+                        self._status(f"Pronto. Modelo carregado {conteudo}." if tipo == "modelo_pronto"
+                                     else "Pronto. O modelo carrega ao transcrever.")
                 elif tipo == "progresso":
                     self.barra["value"] = conteudo
                     self._status(f"Transcrevendo... {conteudo}%")
@@ -277,6 +311,7 @@ class App:
         except queue.Empty:
             pass
         if tipo:
+            self.transcrevendo = False
             self.barra.grid_remove()
             self.botao.configure(state="normal")
             self.campo_nome.configure(state="normal")

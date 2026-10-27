@@ -9,6 +9,7 @@ import logging
 import os
 import site
 import sys
+import threading
 from pathlib import Path
 from typing import Callable
 
@@ -61,14 +62,28 @@ class Transcritor:
     """Carrega o modelo uma vez e transcreve quantos arquivos precisar."""
 
     def __init__(self, modelo: str = "auto", idioma: str = "pt",
-                 aviso_download: AvisoDownload = lambda _b, _t: None):
-        """Guarda as escolhas; o modelo só é carregado no primeiro uso.
-        `aviso_download(baixado, total)` recebe o progresso do download."""
+                 aviso_download: AvisoDownload = lambda _b, _t: None,
+                 modo_salvo: str = "", ao_achar_modo=lambda _m: None):
+        """Guarda as escolhas; o modelo é carregado em preparar() ou no primeiro uso.
+        `aviso_download(baixado, total)` recebe o progresso do download.
+        `modo_salvo` ("cuda/int8", "cpu/int8"...) é o modo que já funcionou
+        nesse PC: é tentado primeiro, sem perder tempo com os que falham.
+        `ao_achar_modo(modo)` é chamado quando um modo novo funciona."""
         self.modelo_pedido = modelo
         self.aviso_download = aviso_download
         self.idioma = idioma
         self.modelo = None
         self.dispositivo = None
+        self.modo_salvo = modo_salvo
+        self.ao_achar_modo = ao_achar_modo
+        self._trava_carga = threading.Lock()
+
+    def preparar(self) -> None:
+        """Carrega o modelo agora (ex.: ao abrir o app), se ainda não carregou.
+        Seguro chamar de várias threads: só uma carrega, as outras esperam."""
+        with self._trava_carga:
+            if self.modelo is None:
+                self._carregar()
 
     def _nome_modelo(self, gpu: bool) -> str:
         """Resolve "auto" para o modelo certo do hardware."""
@@ -83,6 +98,12 @@ class Transcritor:
 
         tentativas = [] if so_cpu or not _tem_gpu() else list(TENTATIVAS_GPU)
         tentativas.append(TENTATIVA_CPU)
+        # Só um modo de placa que já funcionou passa na frente (pula os que falham).
+        # Modo de CPU nunca é priorizado, para não deixar de usar uma placa nova.
+        salvo = tuple(self.modo_salvo.split("/")) if self.modo_salvo.startswith("cuda/") else None
+        if salvo in tentativas:
+            tentativas.remove(salvo)
+            tentativas.insert(0, salvo)
         ultimo_erro = None
         for dispositivo, tipo in tentativas:
             nome = self._nome_modelo(dispositivo == "cuda")
@@ -96,6 +117,10 @@ class Transcritor:
                 )
                 self.dispositivo = dispositivo
                 log.info("Modelo carregado em %s (%s).", dispositivo, tipo)
+                modo = f"{dispositivo}/{tipo}"
+                if dispositivo == "cuda" and modo != self.modo_salvo:
+                    self.modo_salvo = modo
+                    self.ao_achar_modo(modo)
                 return
             except Exception as erro:
                 log.warning("Falhou em %s (%s): %s", dispositivo, tipo, erro)
@@ -129,8 +154,7 @@ class Transcritor:
                     progresso: Progresso = lambda _f: None) -> list[Segmento]:
         """Transcreve um arquivo. Se a GPU falhar no meio (driver, CUDA,
         memória), recarrega na CPU e tenta de novo."""
-        if self.modelo is None:
-            self._carregar()
+        self.preparar()
         try:
             return self._rodar(caminho, falante, progresso)
         except Exception as erro:
