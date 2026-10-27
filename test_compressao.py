@@ -11,7 +11,7 @@ import unittest
 import wave
 from pathlib import Path
 
-from compressao import _duracao, comprimir, comprimir_reuniao
+from compressao import duracao_audio, comprimir, comprimir_reuniao
 
 
 def _criar_wav(caminho: Path, segundos: float, canais: int) -> None:
@@ -41,7 +41,7 @@ class TestCompressao(unittest.TestCase):
             self.assertFalse(wav.exists())
             self.assertTrue(ogg.exists())
             self.assertLess(ogg.stat().st_size, tamanho_wav / 10)
-            self.assertAlmostEqual(_duracao(ogg), 5, delta=0.5)
+            self.assertAlmostEqual(duracao_audio(ogg), 5, delta=0.5)
 
     def test_reuniao_inteira(self):
         """Os dois áudios da pasta são comprimidos; a transcrição não é tocada."""

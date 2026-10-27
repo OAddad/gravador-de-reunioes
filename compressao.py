@@ -19,7 +19,7 @@ TOLERANCIA_SEG = 1.0    # diferença de duração aceita entre o WAV e o .ogg
 ARQUIVOS_WAV = ("audio_microfone.wav", "audio_sistema.wav")
 
 
-def _duracao(caminho: Path) -> float:
+def duracao_audio(caminho: Path) -> float:
     """Duração do áudio em segundos (lendo o arquivo inteiro, sem confiar no cabeçalho)."""
     with av.open(str(caminho)) as entrada:
         stream = entrada.streams.audio[0]
@@ -63,7 +63,7 @@ def comprimir(wav: Path) -> Path:
         esvaziar(final=True)
         codificar(None)
 
-    original, comprimido = _duracao(wav), _duracao(parcial)
+    original, comprimido = duracao_audio(wav), duracao_audio(parcial)
     if abs(original - comprimido) > TOLERANCIA_SEG:
         parcial.unlink(missing_ok=True)
         raise RuntimeError(f"Duração diferente após comprimir {wav.name}: {original:.1f}s x {comprimido:.1f}s")

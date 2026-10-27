@@ -33,8 +33,8 @@ if sys.stdout is None:
     sys.stdout = open(os.devnull, "w")
 
 from config import carregar_config, salvar_config  # noqa: E402
-from historico import ultimas_reunioes  # noqa: E402
-from compressao import comprimir_pendentes, comprimir_reuniao  # noqa: E402
+from historico import FAIXAS, Reuniao, audio_da_faixa, ultimas_reunioes  # noqa: E402
+from compressao import duracao_audio, comprimir_pendentes, comprimir_reuniao  # noqa: E402
 from limpeza import limpar_audios_antigos  # noqa: E402
 from merger import formatar, montar_transcricao, tempo  # noqa: E402
 from recorder import Gravador  # noqa: E402
@@ -192,20 +192,31 @@ class App:
             logging.info("Nome do operador trocado para %s", nome)
 
     def _atualizar_lista(self) -> None:
-        """Mostra as 5 últimas transcrições com Abrir e Mostrar na pasta."""
+        """Mostra as 5 últimas reuniões com Abrir, Na pasta e Refazer.
+        Reunião cuja transcrição falhou aparece como "(sem texto)"."""
         for filho in self.lista.winfo_children():
             filho.destroy()
         reunioes = ultimas_reunioes(Path(self.cfg["pasta_saida"]))
         if not reunioes:
-            ttk.Label(self.lista, text="Nenhuma transcrição ainda.", foreground="#777").grid(sticky="w")
+            ttk.Label(self.lista, text="Nenhuma reunião ainda.", foreground="#777").grid(sticky="w")
             return
         for i, r in enumerate(reunioes):
-            ttk.Label(self.lista, text=r.rotulo, width=24).grid(row=i, column=0, sticky="w", pady=1)
-            ttk.Button(self.lista, text="Abrir", width=7,
-                       command=lambda a=r.arquivo: os.startfile(a)).grid(row=i, column=1, padx=(4, 0))
-            ttk.Button(self.lista, text="Na pasta", width=9,
-                       command=lambda a=r.arquivo: subprocess.Popen(f'explorer /select,"{a}"')
+            rotulo = r.rotulo if r.arquivo else f"{r.rotulo} (sem texto)"
+            ttk.Label(self.lista, text=rotulo, width=26).grid(row=i, column=0, sticky="w", pady=1)
+            abrir = ttk.Button(self.lista, text="Abrir", width=6,
+                               command=lambda a=r.arquivo: os.startfile(a))
+            abrir.grid(row=i, column=1, padx=(4, 0))
+            if not r.arquivo:
+                abrir.configure(state="disabled")
+            alvo = r.arquivo or r.pasta
+            ttk.Button(self.lista, text="Na pasta", width=8,
+                       command=lambda a=alvo: subprocess.Popen(f'explorer /select,"{a}"')
                        ).grid(row=i, column=2, padx=(4, 0))
+            refazer = ttk.Button(self.lista, text="Refazer", width=8,
+                                 command=lambda reuniao=r: self._refazer(reuniao))
+            refazer.grid(row=i, column=3, padx=(4, 0))
+            if not r.tem_audio:
+                refazer.configure(state="disabled")  # áudio já apagado pela limpeza
 
     # ---------- gravar ----------
     def _gravar(self) -> None:
@@ -242,6 +253,25 @@ class App:
             self.card = None
         self.raiz.deiconify()
         self.raiz.lift()
+        self._iniciar_transcricao(self.pasta_atual, self.contato, self.inicio_dt, duracao)
+
+    def _refazer(self, reuniao: Reuniao) -> None:
+        """Transcreve de novo uma reunião a partir do áudio salvo (WAV ou comprimido)."""
+        if self.gravador.gravando or self.transcrevendo:
+            messagebox.showinfo("Aguarde", "Espere terminar a gravação ou a transcrição atual.")
+            return
+        if reuniao.arquivo and not messagebox.askyesno(
+                "Refazer transcrição", f"Transcrever de novo {reuniao.rotulo}?\n"
+                "A transcrição atual será substituída."):
+            return
+        logging.info("Refazendo a transcrição de %s", reuniao.pasta.name)
+        self._iniciar_transcricao(reuniao.pasta, reuniao.contato,
+                                  reuniao.data or datetime.now(), None)
+
+    def _iniciar_transcricao(self, pasta: Path, contato: str, data: datetime,
+                             duracao: float | None) -> None:
+        """Trava a janela, mostra o progresso e transcreve em segundo plano."""
+        self.pasta_atual = pasta
         self.botao.configure(state="disabled")
         self.campo_nome.configure(state="disabled")
         self.barra["value"] = 0
@@ -252,7 +282,8 @@ class App:
             self._status("Carregando o modelo de transcrição...")
         else:
             self._status("Transcrevendo... 0%")
-        threading.Thread(target=self._transcrever, args=(duracao,), daemon=True).start()
+        threading.Thread(target=self._transcrever, args=(pasta, contato, data, duracao),
+                         daemon=True).start()
 
     # ---------- transcrever ----------
     def _preparar_modelo(self) -> None:
@@ -294,17 +325,24 @@ class App:
         """Microfone vale de 0 a 50%, áudio do computador de 50 a 100%."""
         self.fila.put(("progresso", int((etapa + fracao) * 50)))
 
-    def _transcrever(self, duracao: float) -> None:
-        """Roda em thread: transcreve as duas trilhas e salva o .txt."""
+    def _transcrever(self, pasta: Path, outro: str, data: datetime,
+                     duracao: float | None) -> None:
+        """Roda em thread: transcreve as duas trilhas e salva o .txt.
+        Lê o WAV ou, se já foi comprimido, o .ogg."""
         try:
-            pasta, eu, outro = self.pasta_atual, self.cfg["meu_nome"], self.contato
+            eu = self.cfg["meu_nome"]
+            audio_mic, audio_sis = (audio_da_faixa(pasta, f) for f in FAIXAS)
+            if audio_mic is None or audio_sis is None:
+                raise RuntimeError("Os áudios dessa reunião não existem mais.")
+            if duracao is None:
+                duracao = duracao_audio(audio_sis)
             mic = self.transcritor.transcrever(
-                pasta / "audio_microfone.wav", eu, lambda f: self._avisar_progresso(0, f))
+                audio_mic, eu, lambda f: self._avisar_progresso(0, f))
             sistema = self.transcritor.transcrever(
-                pasta / "audio_sistema.wav", outro, lambda f: self._avisar_progresso(1, f))
+                audio_sis, outro, lambda f: self._avisar_progresso(1, f))
             cabecalho = (
                 f"Reunião: {eu} x {outro}\n"
-                f"Data: {self.inicio_dt.strftime('%d/%m/%Y %H:%M')}\n"
+                f"Data: {data.strftime('%d/%m/%Y %H:%M')}\n"
                 f"Duração: {tempo(duracao)}\n"
                 f"Participantes: {eu} (microfone), {outro} (áudio do computador)"
             )
