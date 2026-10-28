@@ -23,7 +23,8 @@ from merger import Segmento, frases
 log = logging.getLogger("gravador")
 
 TAXA = 16000
-LIMIAR_AUTOMATICO = 0.9          # no modo "Não sei": testado para não separar demais
+LIMIAR_AUTOMATICO = 1.0          # modo "Não sei": na dúvida separa a mais (dá pra juntar
+                                 # repetindo o nome); juntar pessoas diferentes não tem conserto
 AMOSTRA_SEG = 8.0                # duração máxima do trecho do botão Ouvir
 BASE = "https://github.com/k2-fsa/sherpa-onnx/releases/download"
 URL_SEGMENTACAO = f"{BASE}/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2"

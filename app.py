@@ -139,7 +139,8 @@ class DialogoNomes(tk.Toplevel):
         q = ttk.Frame(self, padding=16)
         q.grid()
         ttk.Label(q, text=f"Encontrei {len(pessoas)} vozes no áudio do computador. "
-                          "Dê o nome de cada uma:", wraplength=420).grid(
+                          "Dê o nome de cada uma. Se duas forem a mesma pessoa, "
+                          "repita o nome.", wraplength=420).grid(
             row=0, column=0, columnspan=3, sticky="w", pady=(0, 10))
         self.campos = []
         for i, p in enumerate(pessoas):
@@ -426,7 +427,8 @@ class App:
             if p.amostra:
                 p.amostra.unlink(missing_ok=True)
         renomear(palavras, resposta)
-        return [resposta.get(r, r) for r in rotulos]
+        # mesmo nome em duas vozes (era a mesma pessoa) aparece uma vez só
+        return list(dict.fromkeys(resposta.get(r, r) for r in rotulos))
 
     def _transcrever(self, pasta: Path, outro: str, data: datetime,
                      duracao: float | None, n_pessoas: int | None = 1) -> None:
