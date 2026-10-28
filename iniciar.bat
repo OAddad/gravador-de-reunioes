@@ -19,9 +19,9 @@ if not "%INSTALADA%"=="%VERSAO%" (
         pause
         exit /b 1
     )
-    echo %VERSAO%>.venv\versao.txt
+    >.venv\versao.txt echo %VERSAO%
     powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0criar_atalho.ps1"
     echo.
     echo Instalado com sucesso! Abrindo o app...
 )
-start "" .venv\Scripts\pythonw.exe app.py
+start "" .venv\Scripts\pythonw.exe app.py --do-instalador

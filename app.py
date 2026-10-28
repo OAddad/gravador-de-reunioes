@@ -554,7 +554,9 @@ def _atualizacao_pendente() -> bool:
 
 
 if __name__ == "__main__":
-    if sys.platform == "win32" and _atualizacao_pendente():
+    # --do-instalador: aberto pelo próprio iniciar.bat, que acabou de instalar
+    # (evita ficar chamando o instalador em ciclo se algo der errado)
+    if sys.platform == "win32" and "--do-instalador" not in sys.argv and _atualizacao_pendente():
         # roda o instalador (janela preta com o progresso); ele abre o app no fim
         logging.info("Atualização pendente: chamando o iniciar.bat")
         subprocess.Popen(["cmd", "/c", "start", "", str(PASTA_APP / "iniciar.bat")], cwd=PASTA_APP)
