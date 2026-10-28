@@ -1,7 +1,7 @@
 @echo off
 cd /d "%~dp0"
 rem Troque este numero sempre que o requirements.txt mudar, para reinstalar.
-set VERSAO=5
+set VERSAO=6
 if not exist .venv\Scripts\python.exe (
     echo Criando o ambiente do app, aguarde...
     py -3 -m venv .venv 2>nul || python -m venv .venv
@@ -20,6 +20,7 @@ if not "%INSTALADA%"=="%VERSAO%" (
         exit /b 1
     )
     echo %VERSAO%>.venv\versao.txt
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0criar_atalho.ps1"
     echo.
     echo Instalado com sucesso! Abrindo o app...
 )

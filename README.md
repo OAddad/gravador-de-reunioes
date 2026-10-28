@@ -20,6 +20,9 @@ Grava ligações e reuniões no Windows (WhatsApp Desktop, Google Meet, Zoom, qu
 1. Instale o **Python 3.11 ou 3.12** em [python.org](https://www.python.org/downloads/) e marque "Add Python to PATH".
 2. Baixe esta pasta (Code > Download ZIP) e descompacte onde quiser.
 3. Dê dois cliques em `iniciar.bat`. Na primeira vez ele instala as bibliotecas (alguns minutos; com placa NVIDIA baixa mais ~1,3 GB das bibliotecas CUDA). Não feche a janela preta.
+4. Ao terminar, ele cria o atalho **Gravador de Reuniões** na Área de Trabalho e no menu Iniciar. Daí em diante abra sempre pelo atalho (sem janela preta). Para fixar na barra de tarefas: clique direito no atalho > **Fixar na barra de tarefas**.
+
+Quando sair uma atualização das bibliotecas, o próprio app percebe ao abrir e roda o instalador sozinho.
 
 Na primeira transcrição o app baixa o modelo do Whisper para a pasta `modelos/` (464 MB o `small`, 1,5 GB o `large-v3-turbo`). Isso acontece uma vez só. Copiando a pasta inteira para outro PC, o modelo vai junto.
 

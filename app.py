@@ -541,7 +541,28 @@ class App:
         self.raiz.destroy()
 
 
+def _atualizacao_pendente() -> bool:
+    """True se o iniciar.bat tem uma versão de bibliotecas mais nova que a
+    instalada (o atalho abre o app direto, sem passar pelo instalador)."""
+    try:
+        bat = (PASTA_APP / "iniciar.bat").read_text(encoding="utf-8", errors="ignore")
+        esperada = re.search(r"set VERSAO=(\d+)", bat).group(1)
+        instalada = (PASTA_APP / ".venv" / "versao.txt").read_text(encoding="utf-8").strip()
+        return esperada != instalada
+    except Exception:
+        return False
+
+
 if __name__ == "__main__":
+    if sys.platform == "win32" and _atualizacao_pendente():
+        # roda o instalador (janela preta com o progresso); ele abre o app no fim
+        logging.info("Atualização pendente: chamando o iniciar.bat")
+        subprocess.Popen(["cmd", "/c", "start", "", str(PASTA_APP / "iniciar.bat")], cwd=PASTA_APP)
+        sys.exit(0)
     janela = tk.Tk()
+    try:
+        janela.iconbitmap(default=str(PASTA_APP / "icone.ico"))  # vale para todas as janelas
+    except Exception:
+        logging.info("Ícone não carregado")
     App(janela)
     janela.mainloop()
